@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from face_detector import HaarFaceDetector
 from preprocessing import preprocess_face_image
-from feature_extraction import extract_lbp_hog_features
+from feature_extraction import combine_features
 import joblib
 
 # Path settings
@@ -24,32 +24,34 @@ def predict_emotion_from_image(img_path):
         print(f"Cannot read image: {img_path}")
         return
 
-    # Preprocess, detect faces
     gray = cv2.cvtColor(raw_img, cv2.COLOR_BGR2GRAY)
     face_boxes = face_detector.detect_faces(gray)
 
-    for (x, y, w, h) in face_boxes:
-        face_crop = gray[y:y+h, x:x+w]
-        face_resized = cv2.resize(face_crop, (48, 48))
+    # Filter out small false positive detections in background
+    min_face_size = 65
+    valid_faces = []
+    for box in face_boxes:
+        x, y, w, h = box
+        if w >= min_face_size and h >= min_face_size:
+            valid_faces.append(box)
 
-        # Extract feature and scale
-        feat = extract_lbp_hog_features(face_resized)
+    for (x, y, w, h) in valid_faces:
+        face_list = preprocess_face_image(raw_img, single_roi=(x, y, w, h))
+        preprocessed_face = face_list[0]
+        feat = combine_features(preprocessed_face)
         feat_scaled = scaler.transform([feat])
 
-        # Predict emotion
         pred_idx = svm_model.predict(feat_scaled)[0]
         pred_emotion = emotion_labels[int(pred_idx)]
 
-        # Draw bounding box and text
         cv2.rectangle(raw_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
         cv2.putText(raw_img, f"{pred_emotion}", (x, y - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-    # ========== This part controls window size ==========
-    # Resize whole output image for smaller display window
-    display_scale = 0.7
-    display_img = cv2.resize(raw_img, (0,0), fx=display_scale, fy=display_scale)
-    cv2.imshow("Image Prediction", display_img)
+    # Resizable OpenCV window
+    cv2.namedWindow("Image Prediction", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Image Prediction", 700, 700)
+    cv2.imshow("Image Prediction", raw_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 

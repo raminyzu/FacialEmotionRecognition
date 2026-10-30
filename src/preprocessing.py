@@ -5,15 +5,22 @@ from face_detector import HaarFaceDetector
 # Initialize our face detector once
 face_detector = HaarFaceDetector()
 
-def preprocess_face_image(raw_bgr_img, target_size=(48, 48)):
+
+def preprocess_face_image(raw_bgr_img, target_size=(48, 48), single_roi=None):
     """
     Full preprocessing pipeline for a single input image
     :param raw_bgr_img: Input image read by OpenCV (BGR format)
     :param target_size: Fixed size we use for FER-2013 (48,48)
+    :param single_roi: optional tuple (x,y,w,h). If provided, use this box instead of running face detection again
     :return: List of preprocessed grayscale face images (one per detected face)
     """
     gray_full = cv2.cvtColor(raw_bgr_img, cv2.COLOR_BGR2GRAY)
-    face_boxes = face_detector.detect_faces(gray_full)
+
+    if single_roi is not None:
+        face_boxes = [single_roi]
+    else:
+        face_boxes = face_detector.detect_faces(gray_full)
+
     processed_faces = []
 
     for (x, y, w, h) in face_boxes:
