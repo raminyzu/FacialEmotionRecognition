@@ -89,3 +89,6 @@ if __name__ == "__main__":
     joblib.dump(scaler, SCALER_SAVE_PATH)
     print(f"\nModel saved: {MODEL_SAVE_PATH}")
     print(f"Scaler saved: {SCALER_SAVE_PATH}")
+import joblib
+joblib.dump(y_test, "outputs/y_test.pkl")
+joblib.dump(y_pred, "outputs/y_pred.pkl")
