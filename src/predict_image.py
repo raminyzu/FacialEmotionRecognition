@@ -1,49 +1,58 @@
 import cv2
 import numpy as np
-import joblib
-from pathlib import Path
 from face_detector import HaarFaceDetector
 from preprocessing import preprocess_face_image
-from feature_extraction import extract_lbp_features, extract_hog_features
+from feature_extraction import extract_lbp_hog_features
+import joblib
 
-# Base project root (E:\FacialEmotionRecognition)
-BASE_DIR = Path(__file__).parent.parent
-MODEL_PATH = BASE_DIR / "models" / "svm_emotion_improved.pkl"
-SCALER_PATH = BASE_DIR / "models" / "scaler_improved.pkl"
-TEST_IMG_PATH = BASE_DIR / "test_images" / "happy.jpg"
+# Path settings
+TEST_IMG_PATH = "test_images/happy.jpg"
+MODEL_PATH = "models/svm_emotion_improved.pkl"
+SCALER_PATH = "models/scaler_improved.pkl"
 
-face_detector = HaarFaceDetector()
 emotion_labels = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
 
-# Load your saved improved model and scaler
-model = joblib.load(MODEL_PATH)
+# Load trained model and scaler
+svm_model = joblib.load(MODEL_PATH)
 scaler = joblib.load(SCALER_PATH)
+face_detector = HaarFaceDetector()
 
-def extract_combined_features(face_gray):
-    lbp_feat = extract_lbp_features(face_gray)
-    hog_feat = extract_hog_features(face_gray)
-    combined = np.concatenate([lbp_feat, hog_feat])
-    return combined
 
 def predict_emotion_from_image(img_path):
-    img = cv2.imread(str(img_path))
-    if img is None:
-        print("Cannot read image file, check the path!")
+    raw_img = cv2.imread(img_path)
+    if raw_img is None:
+        print(f"Cannot read image: {img_path}")
         return
 
-    faces = preprocess_face_image(img)
-    for face in faces:
-        feat = extract_combined_features(face)
+    # Preprocess, detect faces
+    gray = cv2.cvtColor(raw_img, cv2.COLOR_BGR2GRAY)
+    face_boxes = face_detector.detect_faces(gray)
+
+    for (x, y, w, h) in face_boxes:
+        face_crop = gray[y:y+h, x:x+w]
+        face_resized = cv2.resize(face_crop, (48, 48))
+
+        # Extract feature and scale
+        feat = extract_lbp_hog_features(face_resized)
         feat_scaled = scaler.transform([feat])
-        pred_idx = model.predict(feat_scaled)[0]
-        pred_emotion = emotion_labels[pred_idx]
 
-        cv2.putText(img, f"{pred_emotion}", (20,30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0),2)
+        # Predict emotion
+        pred_idx = svm_model.predict(feat_scaled)[0]
+        pred_emotion = emotion_labels[int(pred_idx)]
 
-    cv2.imshow("Image Prediction", img)
+        # Draw bounding box and text
+        cv2.rectangle(raw_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.putText(raw_img, f"{pred_emotion}", (x, y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+    # ========== This part controls window size ==========
+    # Resize whole output image for smaller display window
+    display_scale = 0.7
+    display_img = cv2.resize(raw_img, (0,0), fx=display_scale, fy=display_scale)
+    cv2.imshow("Image Prediction", display_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     predict_emotion_from_image(TEST_IMG_PATH)
